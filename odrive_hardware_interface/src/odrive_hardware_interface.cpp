@@ -403,6 +403,15 @@ return_type ODriveHardwareInterface::write()
             odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_POS + per_axis_offset * axes_[i], input_pos));
 
       case integration_level_t::VELOCITY:
+        RCLCPP_INFO(
+          rclcpp::get_logger("odrive_hardware_interface"),
+          "joint cmd: %f type: %s", joint_commands_velocities_[i], typeid(joint_commands_velocities_[i]).name()
+        );
+
+        RCLCPP_INFO(
+          rclcpp::get_logger("odrive_hardware_interface"),
+          "Atuator cmd: %f type: %s", hw_commands_velocities_[i], typeid(hw_commands_velocities_[i]).name()
+        );
         commands_transmissions_[i].joint_to_actuator();
         input_vel = hw_commands_velocities_[i] / 2 / M_PI;
         CHECK(
@@ -410,7 +419,7 @@ return_type ODriveHardwareInterface::write()
 
       case integration_level_t::EFFORT:
         commands_transmissions_[i].joint_to_actuator();
-        input_torque = hw_commands_efforts_[i] / 2 / M_PI;
+        input_torque = hw_commands_efforts_[i];
         CHECK(odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_TORQUE + per_axis_offset * axes_[i],
                             input_torque));
 
