@@ -42,6 +42,13 @@ return_type ODriveHardwareInterface::configure(const hardware_interface::Hardwar
   hw_fet_temperatures_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
   hw_motor_temperatures_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
 
+  joint_positions_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+  joint_velocities_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+  joint_efforts_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+  joint_commands_positions_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+  joint_commands_velocities_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+  joint_commands_efforts_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+
   for (const hardware_interface::ComponentInfo& sensor : info_.sensors)
   {
     serial_numbers_[0].emplace_back(std::stoull(sensor.parameters.at("serial_number"), 0, 16));
@@ -75,6 +82,71 @@ return_type ODriveHardwareInterface::configure(const hardware_interface::Hardwar
 
   control_level_.resize(info_.joints.size(), integration_level_t::UNDEFINED);
   status_ = hardware_interface::status::CONFIGURED;
+
+  for (size_t i = 0; i < info_.joints.size(); i++){
+    std::string joint_name = info_.joints[i].name;
+    auto trans_it = std::find_if(
+      info_.transmissions.cbegin(), info_.transmissions.cend(), 
+      [joint_name](const auto & trans_info) { return trans_info.joints[0].name == joint_name; });
+    
+    double mechanical_reduction = 1;
+    double joint_offset = 0;
+
+    if (trans_it == info_.transmissions.cend()){
+      RCLCPP_INFO(
+        rclcpp::get_logger("odrive_hardware_interface"),
+        "No transmission found for joint name '%s', defaulting to a gear ratio of 1", info.joints[i].name
+      );
+    } else {
+      RCLCPP_INFO(
+        rclcpp::get_logger("odrive_hardware_interface"),
+        "Transmission found for joint name '%s', setting up transmission with gear ratio %f", info.joints[i].name, trans_it->joints[0].mechanical_reduction
+      );
+
+      hardware_interface::TransmissionInfo trans_info = *trans_it;
+      hardware_interface::JointInfo joint_info = trans_info.joints[0];
+      
+      mechanical_reduction = joint_info.mechanical_reduction;
+      joint_offset = joint_info.offset;
+    }
+
+    transmission_interface::SimpleTransmission simple_transmission(
+      mechanical_reduction, 
+      joint_offset);
+
+    transmission_interface::JointHandle position_joint_handle("joint_position", hardware_interface::HW_IF_POSITION, &joint_positions_[i]);
+    transmission_interface::JointHandle velocity_joint_handle("joint_velocity", hardware_interface::HW_IF_VELOCITY, &joint_velocities_[i]);
+    transmission_interface::JointHandle effort_joint_handle("joint_effort", hardware_interface::HW_IF_EFFORT, &joint_efforts_[i]);
+
+    transmission_interface::ActuatorHandle position_actuator_handle("actuator_position", hardware_interface::HW_IF_POSITION, &hw_positions_[i]);
+    transmission_interface::ActuatorHandle velocity_actuator_handle("actuator_velocity", hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]);
+    transmission_interface::ActuatorHandle effort_actuator_handle("actuator_effort", hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]);
+
+    std::vector<transmission_interface::JointHandle> joint_handles = {position_joint_handle, velocity_joint_handle, effort_joint_handle};
+    std::vector<transmission_interface::ActuatorHandle> actuator_handles = {position_actuator_handle, velocity_actuator_handle, effort_actuator_handle};
+
+    simple_transmission.configure(joint_handles, actuator_handles);
+    transmissions_.push_back(simple_transmission);
+
+    transmission_interface::SimpleTransmission simple_command_transmission(
+      mechanical_reduction, 
+      joint_offset);
+
+    transmission_interface::JointHandle position_command_joint_handle("joint_command_position", hardware_interface::HW_IF_POSITION, &joint_commands_positions_[i]);
+    transmission_interface::JointHandle velocity_command_joint_handle("joint_command_velocity", hardware_interface::HW_IF_VELOCITY, &joint_commands_velocities_[i]);
+    transmission_interface::JointHandle effort_command_joint_handle("joint_command_effort", hardware_interface::HW_IF_EFFORT, &joint_commands_efforts_[i]);
+
+    transmission_interface::ActuatorHandle position_command_actuator_handle("actuator_command_position", hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]);
+    transmission_interface::ActuatorHandle velocity_command_actuator_handle("actuator_command_velocity", hardware_interface::HW_IF_VELOCITY, &hw_commands_velocities_[i]);
+    transmission_interface::ActuatorHandle effort_command_actuator_handle("actuator_command_effort", hardware_interface::HW_IF_EFFORT, &hw_commands_efforts_[i]);
+
+    std::vector<transmission_interface::JointHandle> joint_command_handles = {position_command_joint_handle, velocity_command_joint_handle, effort_command_joint_handle};
+    std::vector<transmission_interface::ActuatorHandle> actuator_command_handles = {position_command_actuator_handle, velocity_command_actuator_handle, effort_command_actuator_handle};
+  
+    simple_command_transmission.configure(joint_command_handles, actuator_command_handles);
+    commands_transmissions_.push_back(simple_command_transmission);
+  } 
+
   return return_type::OK;
 }
 
@@ -90,11 +162,11 @@ std::vector<hardware_interface::StateInterface> ODriveHardwareInterface::export_
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     state_interfaces.emplace_back(
-        hardware_interface::StateInterface(info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]));
+        hardware_interface::StateInterface(info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joint_efforts_[i]));
     state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]));
+        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joint_velocities_[i]));
     state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_positions_[i]));
+        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joint_positions_[i]));
     state_interfaces.emplace_back(
         hardware_interface::StateInterface(info_.joints[i].name, "axis_error", &hw_axis_errors_[i]));
     state_interfaces.emplace_back(
@@ -118,11 +190,11 @@ std::vector<hardware_interface::CommandInterface> ODriveHardwareInterface::expor
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_commands_efforts_[i]));
+        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joint_commands_efforts_[i]));
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_commands_velocities_[i]));
+        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joint_commands_velocities_[i]));
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]));
+        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joint_commands_positions_[i]));
   }
 
   return command_interfaces;
@@ -309,6 +381,8 @@ return_type ODriveHardwareInterface::read()
     CHECK(odrive->read(serial_numbers_[1][i], AXIS__MOTOR__MOTOR_THERMISTOR__TEMPERATURE + per_axis_offset * axes_[i],
                        motor_temperature));
     hw_motor_temperatures_[i] = motor_temperature;
+
+    transmissions_[i].actuator_to_joint();
   }
 
   return return_type::OK;
@@ -323,19 +397,22 @@ return_type ODriveHardwareInterface::write()
     switch (control_level_[i])
     {
       case integration_level_t::POSITION:
-        input_pos = hw_commands_positions_[i] / 2 / M_PI;
+        input_pos = joint_commands_positions_[i] / 2 / M_PI;
+        commands_transmissions_[i].joint_to_actuator();
         CHECK(
-            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_POS + per_axis_offset * axes_[i], input_pos));
+            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_POS + per_axis_offset * axes_[i], hw_commands_positions_[i]));
 
       case integration_level_t::VELOCITY:
-        input_vel = hw_commands_velocities_[i] / 2 / M_PI;
+        input_pos = joint_commands_velocities_[i] / 2 / M_PI;
+        commands_transmissions_[i].joint_to_actuator();
         CHECK(
-            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_VEL + per_axis_offset * axes_[i], input_vel));
+            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_VEL + per_axis_offset * axes_[i], hw_commands_velocities_[i]));
 
       case integration_level_t::EFFORT:
-        input_torque = hw_commands_efforts_[i];
+        input_pos = joint_commands_efforts_[i] / 2 / M_PI;
+        commands_transmissions_[i].joint_to_actuator();
         CHECK(odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_TORQUE + per_axis_offset * axes_[i],
-                            input_torque));
+                            hw_commands_efforts_[i]));
 
       case integration_level_t::UNDEFINED:
         if (enable_watchdogs_[i])

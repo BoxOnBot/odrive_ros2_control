@@ -22,6 +22,7 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "odrive_hardware_interface/odrive_usb.hpp"
 #include "odrive_hardware_interface/visibility_control.hpp"
+#include "transmission_interface/simple_transmission.hpp"
 
 #define AXIS_STATE_IDLE 1
 #define AXIS_STATE_CLOSED_LOOP_CONTROL 8
@@ -95,6 +96,16 @@ private:
   std::vector<double> hw_controller_errors_;
   std::vector<double> hw_fet_temperatures_;
   std::vector<double> hw_motor_temperatures_;
+
+  std::vector<double> joint_commands_positions_;
+  std::vector<double> joint_commands_velocities_;
+  std::vector<double> joint_commands_efforts_;
+  std::vector<double> joint_positions_;
+  std::vector<double> joint_velocities_;
+  std::vector<double> joint_efforts_;
+
+  std::vector<transmission_interface::SimpleTransmission> transmissions_;
+  std::vector<transmission_interface::SimpleTransmission> commands_transmissions_;
 
   enum class integration_level_t : int32_t
   {
