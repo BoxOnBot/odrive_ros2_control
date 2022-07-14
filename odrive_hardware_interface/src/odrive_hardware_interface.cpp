@@ -114,13 +114,13 @@ return_type ODriveHardwareInterface::configure(const hardware_interface::Hardwar
       mechanical_reduction, 
       joint_offset);
 
-    transmission_interface::JointHandle position_joint_handle("joint_position", hardware_interface::HW_IF_POSITION, &joint_positions_[i]);
-    transmission_interface::JointHandle velocity_joint_handle("joint_velocity", hardware_interface::HW_IF_VELOCITY, &joint_velocities_[i]);
-    transmission_interface::JointHandle effort_joint_handle("joint_effort", hardware_interface::HW_IF_EFFORT, &joint_efforts_[i]);
+    transmission_interface::JointHandle position_joint_handle("joint", hardware_interface::HW_IF_POSITION, &joint_positions_[i]);
+    transmission_interface::JointHandle velocity_joint_handle("joint", hardware_interface::HW_IF_VELOCITY, &joint_velocities_[i]);
+    transmission_interface::JointHandle effort_joint_handle("joint", hardware_interface::HW_IF_EFFORT, &joint_efforts_[i]);
 
-    transmission_interface::ActuatorHandle position_actuator_handle("actuator_position", hardware_interface::HW_IF_POSITION, &hw_positions_[i]);
-    transmission_interface::ActuatorHandle velocity_actuator_handle("actuator_velocity", hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]);
-    transmission_interface::ActuatorHandle effort_actuator_handle("actuator_effort", hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]);
+    transmission_interface::ActuatorHandle position_actuator_handle("actuator", hardware_interface::HW_IF_POSITION, &hw_positions_[i]);
+    transmission_interface::ActuatorHandle velocity_actuator_handle("actuator", hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]);
+    transmission_interface::ActuatorHandle effort_actuator_handle("actuator", hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]);
 
     std::vector<transmission_interface::JointHandle> joint_handles = {position_joint_handle, velocity_joint_handle, effort_joint_handle};
     std::vector<transmission_interface::ActuatorHandle> actuator_handles = {position_actuator_handle, velocity_actuator_handle, effort_actuator_handle};
@@ -132,13 +132,13 @@ return_type ODriveHardwareInterface::configure(const hardware_interface::Hardwar
       mechanical_reduction, 
       joint_offset);
 
-    transmission_interface::JointHandle position_command_joint_handle("joint_command_position", hardware_interface::HW_IF_POSITION, &joint_commands_positions_[i]);
-    transmission_interface::JointHandle velocity_command_joint_handle("joint_command_velocity", hardware_interface::HW_IF_VELOCITY, &joint_commands_velocities_[i]);
-    transmission_interface::JointHandle effort_command_joint_handle("joint_command_effort", hardware_interface::HW_IF_EFFORT, &joint_commands_efforts_[i]);
+    transmission_interface::JointHandle position_command_joint_handle("joint_command", hardware_interface::HW_IF_POSITION, &joint_commands_positions_[i]);
+    transmission_interface::JointHandle velocity_command_joint_handle("joint_command", hardware_interface::HW_IF_VELOCITY, &joint_commands_velocities_[i]);
+    transmission_interface::JointHandle effort_command_joint_handle("joint_command", hardware_interface::HW_IF_EFFORT, &joint_commands_efforts_[i]);
 
-    transmission_interface::ActuatorHandle position_command_actuator_handle("actuator_command_position", hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]);
-    transmission_interface::ActuatorHandle velocity_command_actuator_handle("actuator_command_velocity", hardware_interface::HW_IF_VELOCITY, &hw_commands_velocities_[i]);
-    transmission_interface::ActuatorHandle effort_command_actuator_handle("actuator_command_effort", hardware_interface::HW_IF_EFFORT, &hw_commands_efforts_[i]);
+    transmission_interface::ActuatorHandle position_command_actuator_handle("actuator_command", hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]);
+    transmission_interface::ActuatorHandle velocity_command_actuator_handle("actuator_command", hardware_interface::HW_IF_VELOCITY, &hw_commands_velocities_[i]);
+    transmission_interface::ActuatorHandle effort_command_actuator_handle("actuator_command", hardware_interface::HW_IF_EFFORT, &hw_commands_efforts_[i]);
 
     std::vector<transmission_interface::JointHandle> joint_command_handles = {position_command_joint_handle, velocity_command_joint_handle, effort_command_joint_handle};
     std::vector<transmission_interface::ActuatorHandle> actuator_command_handles = {position_command_actuator_handle, velocity_command_actuator_handle, effort_command_actuator_handle};
@@ -397,22 +397,22 @@ return_type ODriveHardwareInterface::write()
     switch (control_level_[i])
     {
       case integration_level_t::POSITION:
-        input_pos = joint_commands_positions_[i] / 2 / M_PI;
         commands_transmissions_[i].joint_to_actuator();
+        input_pos = hw_commands_positions_[i] / 2 / M_PI;
         CHECK(
-            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_POS + per_axis_offset * axes_[i], hw_commands_positions_[i]));
+            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_POS + per_axis_offset * axes_[i], input_pos));
 
       case integration_level_t::VELOCITY:
-        input_pos = joint_commands_velocities_[i] / 2 / M_PI;
         commands_transmissions_[i].joint_to_actuator();
+        input_vel = hw_commands_velocities_[i] / 2 / M_PI;
         CHECK(
-            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_VEL + per_axis_offset * axes_[i], hw_commands_velocities_[i]));
+            odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_VEL + per_axis_offset * axes_[i], input_vel));
 
       case integration_level_t::EFFORT:
-        input_pos = joint_commands_efforts_[i] / 2 / M_PI;
         commands_transmissions_[i].joint_to_actuator();
+        input_torque = hw_commands_efforts_[i] / 2 / M_PI;
         CHECK(odrive->write(serial_numbers_[1][i], AXIS__CONTROLLER__INPUT_TORQUE + per_axis_offset * axes_[i],
-                            hw_commands_efforts_[i]));
+                            input_torque));
 
       case integration_level_t::UNDEFINED:
         if (enable_watchdogs_[i])

@@ -17,6 +17,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
+find_package(transmission_interface REQUIRED)
 ament_auto_find_build_dependencies()
 pkg_search_module(LIBUSB1 REQUIRED libusb-1.0)
 
